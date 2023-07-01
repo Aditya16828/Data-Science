@@ -1,0 +1,4 @@
+Making the machine (computer) do those kinds of task in which every time a new situation arises (new set of data). For example, indentifying object in an image.
+
+- **What is Machine Learning??**  
+    Machine learning is a field of science associated with algorithms which allow software application to continuously learn from data and improve in predicting specific outcomes, without being explicitly programmed to do so. Hence, the main difference between a ML application and a Software application is that the former one is self-lerning ina sense which a normal software is not. Rather, a normal software is a simple set of logical instructions involved to follow based on specific conditions, and there is no self-learning.

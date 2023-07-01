@@ -1,0 +1,458 @@
+
+"""## About Case Study
+
+Have you ever struggled to analyze big datasets in Excel then, you should have considered Pandas, powerful programming and data analysis toolbox 
+which allows you to manipulate million-row data points in milliseconds with high processing power and user productivity.
+In this project, You will going to work with real dataset which is about marketing campaign. Targeted marketing, by definition, is the strategy of 
+tailoring and personalizing online advertising according to data acquired on some intended audience.
+In other words, instead of sending out ads to an incredibly large audience, a subset is selected based on their traits, interests, and preferences.
+
+Dataset has fields like customers personal details like name, year of birth, martial status etc and also their recent purchase behaviour which includes
+last purchase_date, recency score, purchases so far etc
+
+## Problem Statement
+
+Analyze the given marketing campaign dataset to find interesting insights and relation among the user attributes which should lead to increase
+ in the effectiveness of same. The analysis and takeaway will be consumed by marketing team to implement next marketing campaign.
+
+Loading the required libraries
+"""
+
+import pandas as pd
+import numpy as np
+from datetime import date
+import datetime as dt
+
+"""Read the CSV data"""
+
+## Read the data using pandas functions
+## use right click copy path after uploading files in colab, for jupyter use the 'r <path>' technique discussed in class
+dfp = pd.read_csv('project_data.csv')
+dfe = pd.read_csv('edu_data.csv')
+dfc_1 = pd.read_excel('customer_data.xlsx', sheet_name='Data 1')
+dfc_2 = pd.read_excel('customer_data.xlsx', sheet_name='Data 2')
+
+dfp.shape
+
+dfe.shape
+
+"""As we have two seperate files of customer_data. Let's concatenate them to make one."""
+
+## Concatenate or append both customer_data using concat function
+
+dfc = pd.concat([dfc_1, dfc_2], ignore_index=True)
+
+dfc.shape
+
+"""Let's go through each data table and skim through the fields"""
+
+## Print the head of the project data
+
+dfp.head(10)
+
+dfp.nunique()[0]-len(dfp.customer_id)
+
+## Print the head of the education data
+
+dfe.head(10)
+
+## Print the head of the customer data
+
+dfc.head(10)
+
+dfc.nunique()[0]-len(dfc.cust_id)
+
+len(dfc.cust_id)
+
+dfc[dfc.cust_id == 20202110]
+
+dfc[dfc.duplicated('cust_id')==True]
+
+"""Let's find out the size of the each data table."""
+
+## Print the shape all data table
+
+dfp.shape
+
+dfe.shape
+
+dfc.shape
+
+## Print the info of all data tables
+
+dfp.info()
+
+dfc.info()
+
+dfc.isnull().sum()
+
+"""Another interesting method is data.info() which gives us the number of data points and variables of the dataset. It also displays
+ the data types. We can see that our dataset has 499 data points and 12 variables ranging from customers’ personal information to purchases, calls, intercoms, and complaints.
+
+Let's perform a high level descriptive analysis using pandas describe method.
+"""
+
+## Get the high level analysis done using describe function
+
+dfp.describe()
+
+"""##### Descriptive Statistics
+\#1 <br>
+The **recency** factor is based on the notion that the more recently a customer has made a purchase with a company, the more likely they will continue
+ to keep the business and brand in mind for subsequent purchases.
+
+As minimum recency score is 0 and maximum 99, data looks evening distributed as 25% of the data has recency of 23, 50% of the data has recency of 47
+ etc. Also, As mean (i.e average) is close to median. 
+
+\#2 <br>
+Analysing purchase pattern, even though maximum puchase volume is 27 it looks like customer's aren't making much online purchase as 75% of distribution
+ is till online purchase of volume 6
+
+"""
+
+## Analyzing customer_data
+dfc.describe(include="float64")
+
+## All values in project_data is numeric hence no point of using include="all"
+
+"""##### Descriptive Statistics
+\#1 <br>
+Year of Birth should not be considered as numerical as its mean of 1978.36 doesn't make sense. So we can safely ignore it.
+
+\#2 <br>
+Most of the customer we have has status Married.
+"""
+
+## Check if any table has a missing value using isnull and sum function
+
+dfp.isnull().sum()
+
+dfc.isnull().sum()
+
+## Print the data where annual_income is not missing
+
+dfc[~dfc["annual_income"].isnull()]
+
+g1 = dfc.groupby(by = 'marital_status')
+g1.first()
+
+"""We know that in customer_data has missing annual income of the customer. Let's try to impute them. Although we can simply take average of all the
+ customer's salary but we should not do that as different classes might have different salary for various reasons. For example a single individual might
+ have less salary compared to married working couple. Hence let's take average salary based on the category and replace missing values."""
+
+## Check what all martial status available
+dfc['marital_status'].unique()
+
+"""Let us consider we are interested to know the unique values of the marital status field then, we should select the column and apply the unique method.
+ As shown below the variable marital status has 5 unique categories. However, we notice that widow and widowed are two two different naming for the same 
+ category so we can make it consistent through using replace method on the column values as displayed below."""
+
+## Replace one of the status using string's replace function
+
+dfc['marital_status'] = dfc['marital_status'].replace(to_replace = 'Widow', value = 'Widowed')
+
+## Check martial status again
+
+dfc['marital_status'].unique()
+
+## Find out the average salary based on each martial_status. 
+## Additionally, reset the index to convert into Df 
+
+annual_income_avg = dfc.groupby("marital_status")["annual_income"].mean().reset_index()
+annual_income_avg
+
+pd.isna(dfc['annual_income']).sum()
+
+dfc[dfc['annual_income'].isnull()]
+
+## Write an function to replace missing annual income value with its average (based on martial status)
+ 
+def annual_income_avg_def (a_i, ms) :
+  lst = []
+  j = a_i[a_i['marital_status']==ms].annual_income.mean()
+  for i in a_i.annual_income:         ## Important Condition
+    if(pd.isna(i)):
+      lst.append(j)
+    else:
+      lst.append(i)
+  return lst
+
+# Function Testing
+ans = annual_income_avg_def(dfc, "Single")
+type(ans)
+
+# method solved in class:
+left = dfc[dfc['annual_income'].isnull()]
+t1 = pd.merge(left, annual_income_avg, how = 'left', on = 'marital_status')
+
+t1 = t1.drop('annual_income_x', axis = 1)
+
+t1 = t1.rename(columns = {'annual_income_y': 'annual_income'})
+t1
+
+dfc[~dfc['annual_income'].isnull()]
+
+type(dfc[~dfc['annual_income'].isnull()])
+
+dfc = pd.concat([t1, dfc[~dfc['annual_income'].isnull()]])
+dfc
+
+dfc.isnull().sum()
+
+pd.isna(dfc.annual_income)
+
+annual_income_avg
+
+annual_income_avg[annual_income_avg['marital_status'] == 'Married']['annual_income']
+
+def annual_income_avg_def1 (annual_income, marital_status) :
+  if pd.isna(annual_income) :         ## Important Condition
+    return float(annual_income_avg[annual_income_avg['marital_status'] == marital_status]['annual_income'])
+  return annual_income
+
+# Function Testing
+annual_income_avg_def1(None, "Married")
+
+## Run through each row using apply and lambda to replace the value
+
+dfc['annual_income'] = dfc.apply(lambda x: annual_income_avg_def1(x["annual_income"], x["marital_status"]), axis=1) 
+## It is important to apply axis=1 othetwise this code will throw KeyError
+## 1 or ‘columns’: apply function to each row.
+
+## Alternative approach using group by + apply + lambda
+
+dfc.groupby('marital_status').apply(lambda g: g['annual_income'].fillna(g['annual_income'].mean()))
+
+## Checking annual_income column for null values
+dfc['annual_income'].isnull().sum()
+
+dfc.isnull().sum()
+
+"""As we need to do thorough analysis we will get to get data from various tables possible. Hence let's merge them based on primary keys."""
+
+dfp.shape
+
+dfp.head()
+
+dfc.head()
+
+## Left join Project and Customer table using merge function
+## Make sure to keep project_data as left table and customer_data as right table 
+## So that with left join we don't lose the missing customer data information
+## Save it in the temporary DF as we need to join one more table
+
+df_temp = pd.merge(dfp, dfc, left_on='customer_id', right_on='cust_id', how='left')
+df_temp
+
+df_temp[df_temp.customer_id==20202110]
+
+df_temp.isnull().sum()
+
+dfe
+
+## Join temporary joined table with education data table
+
+df = pd.merge(df_temp, dfe, on='educational_status_code', how='left')
+df
+
+"""Do we have any missing data? <br>
+
+Let's check.
+"""
+
+df.isnull().sum()
+
+"""It looks like we don't have customer information of 109 customers as we see 109 cust_id missing in compare to customer_id.
+
+> Task - Try joining the table with inner join.
+
+What is the highest education level of the customer?
+"""
+
+## Filter the educational level and find the number of records for each
+## Additionally sort the value in descending order
+
+df['educational_level'].value_counts().sort_values(ascending=False)
+
+df.groupby('educational_level').educational_level.count()
+
+"""Print only customer details of the customer and save it in different DataFrame.
+
+DataFrame should contain `'full_name','year_of_birth', 'educational_level', 'annual_income'` columns.
+"""
+
+## Create an derived table from main table as per the columns mentioned above
+
+edu_details = df[['full_name','year_of_birth', 'educational_level', 'annual_income']]
+edu_details
+
+"""Display those customers who have done Masters."""
+
+df[df["educational_level_x"] == "Master"]
+
+"""Display the top 10 records of the customer based on their recency. 
+
+Record should display `'full_name','educational_level', 'annual_income'` columns
+"""
+
+## Display the top 10 records of the customer based on their recency using loc function
+## Additionally sort them using sort_values function
+
+df.loc[:, ['full_name','educational_level', 'annual_income']].sort_values(by='annual_income', ascending=False, na_position='last').head(10)
+
+df.loc[0:9,['full_name','educational_level', 'annual_income',
+            'recency']].sort_values(by='recency', ascending=False).reset_index()
+
+"""Do the same using .iloc function"""
+
+## Try the same with iloc for practice purpose. Although loc is more easy to use
+
+## Since columns with iloc can only be accessed by column index we need to know the index number
+print(list(df.columns).index('full_name'))
+print(list(df.columns).index('educational_level'))
+print(list(df.columns).index('annual_income'))
+
+df.iloc[:10, [17,2,4]].sort_values(by='annual_income', ascending=False, na_position='last').head(10)
+
+df.sort_values('annual_income', ascending = False).head(10)
+
+"""Although we don't have exact birthdate of an customer but let's try to find age of the customer from birth year.
+
+Hint: Use `date.today().year` to get year from today's date.
+"""
+
+today = date.today()
+today.year
+
+# Find out the age of customers based on the current year
+
+today = date.today()
+year = today.year
+df['age'] = year - df['year_of_birth']
+df['age']
+
+"""Let's find out the average age and annual income of the customers whoes martial status is either 'Widowed' or 'Divorced'. Based on the data special
+ scheme can be planned for them."""
+
+pd.pivot_table(df, values = ['age', 'annual_income'], index='marital_status', aggfunc='mean')
+
+## Filter the data of Widowed and Divorced martial status and find out their average age and annual income using mean function
+
+df.loc[df['marital_status'].isin(['Widowed', 'Divorced'])][['age', 'annual_income']].mean()
+
+df[(df['marital_status']=='Widowed') | (df['marital_status']=='Divorced')][['age', 'annual_income']].mean()
+
+"""Filter the number of customers with an income higher than 75,000 and with a master’s degree."""
+
+# Filter the number of customers with an income higher than 75,000 and with a master’s degree using loc function
+
+df.loc[(df.annual_income > 75000) & (df.educational_level == 'Master')]
+
+## Extend the previous code to count the number of records i.e customer_id
+
+df.loc[(df.annual_income > 75000) & (df.educational_level == 'Master'), "customer_id"].count()
+
+"""We can combine iloc with a python operator to perform the same operation."""
+
+df.iloc[list((df.annual_income > 75000) & (df.educational_level == 'Master')), :]
+
+# Create a new variable which is the sum of all purchases performed by customers
+
+df['total_purchases'] = df.online_purchases + df.store_purchases 
+df['total_purchases']
+
+"""Find the maximum and minimum annual income of the customer."""
+
+## Find the maximum and minimum annual income of the customer using aggregation function
+
+print(df['annual_income_x'].max())
+print(df['annual_income_x'].min())
+
+## Write an function to segregate annual income as per following
+## Greater than 100000: High
+## 50000< Salary < 100000: Medium
+## Anything below 50000: Low
+
+def income_category(annual_income) :
+  if (annual_income >= 100000) :
+    return 'High'
+  elif (50000 < annual_income < 100000) :
+    return 'Medium'
+  else :
+    return 'Low'
+
+# Create an income category (low, medium, high) based on the income variable using apply and lambda function
+
+df['income_category'] = df.apply(lambda x: income_category(x["annual_income"]), axis=1) #assign the categories based on income
+df[['annual_income', 'income_category']]
+
+"""Find out the number of customer belong to each income category."""
+
+## Find out the number of customer belong to each income category using group by
+
+df.groupby("income_category").count()["customer_id"]
+
+"""We see very few customer who are in high income category. Display their name, annual income, education status and age."""
+
+## Display their name, annual income, education status and age using normal filtering
+
+df[df["income_category"] == "High"][["full_name",	"educational_level",	"age",	"total_purchases"]]
+
+"""Also, we see that we have more customers from low income category then medium income category. It will interesting to find the purchase pattern of both types
+ of customer based on their income, age. """
+
+## Find out the list of columns of merged Dataframe
+df.columns
+
+#apply groupby to find the mean of income, recency, number of web and store purchases by educational group
+aggregate_view = pd.DataFrame(df.groupby(by='educational_level')[['annual_income', 'recency', 'store_purchases',  'online_purchases']].mean()).reset_index()
+aggregate_view.sort_values(by = ['recency'], ascending = False)
+
+"""Does educational level and martial status has any correlation with recency? Find out."""
+
+df_1 = df[['marital_status','educational_level','recency', 'total_purchases']].set_index(['marital_status','educational_level'])
+df_1
+
+df.groupby(by=['marital_status','educational_level'])['recency'].mean()
+
+df_1.groupby(level=['marital_status','educational_level'])['recency'].mean()
+
+a1 = np.array([2,4,6,8,10,15,7,-9])
+np.amin(a1)
+
+df_1
+
+grp_1 = df_1.groupby(level=['marital_status','educational_level'])['recency'].agg([np.mean, np.amax, np.amin]).reset_index()
+
+#grp_1.columns
+grp_1.sort_values(by=['amax', 'amin'], ascending=False)
+
+"""Customer with High School and Divorced status has very good recency.
+
+Now, let's compare get average relevancy and gross total_purchases.
+"""
+
+grp_2 = df_1.groupby(level=['marital_status','educational_level']).agg({'recency' : 'mean', 'total_purchases' : 'sum'})
+grp_2.sort_values(by=['total_purchases'], ascending=False)
+
+# Apply pivot table to find the aggregated sum of purchases and mean of recency per education and marital status group
+pivot_table = pd.DataFrame(pd.pivot_table(df, values=['total_purchases', 'recency'], index=['marital_status'],
+                        columns=['educational_level'], aggfunc={'recency': np.mean, 'total_purchases': np.sum}, fill_value=0)).reset_index()
+pivot_table
+
+"""### Recommendations
+Now after we completed the process of data cleaning and performing operations and aggregations on our dataset, we can conclude with some interesting insights
+ about our customer base:
+
+PhD people have the highest income, number of online and store purchases; however, High School graduates people have the highest recency or number of days
+ since their last purchase.
+
+Basic people account for the lowest number of web and store purchases.
+Married people with Graduation level have the highest total purchases.
+Therefore, the business recommendations for any potential marketing campaign should focus on attracting and retaining PhD people and married couples with
+ Graduation level, and more products should be offered to satisfy the needs and interests of other categories such as Basic people that have the lowest
+ purchases as well as High School people who are not purchasing regularly.
+
+Additionally, further work should be conducted to understand customer behaviors and interests, for example, performing RFM analysis or regression modeling
+ will be beneficial to study the effect of variables on the number of purchases by educational or marital status group.
+"""

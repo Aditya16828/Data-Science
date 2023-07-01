@@ -1,0 +1,7 @@
+2 types of columns:
+	1. Dimension
+	2. Measures
+Row Id ->Should be a Dimension
+
+Column Charts are used for categorical comparison
+

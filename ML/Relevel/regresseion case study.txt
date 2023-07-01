@@ -1,0 +1,757 @@
+"""### Description:
+
+7-Eleven is one of the world's major retail stores with a strong presence in US as well. But currently,
+ the company has a problem with understanding demand patterns which leads to inventory and budget allocation related issues.
+ In order to address the same, the company has tasked us with devising a model which can predict the upcoming demand (sales) in a fairly accurate manner. 
+ 
+ 
+The data consists of sales for 45 country-wide stores located in different regions.
+7-Eleven runs promotions throughtout the year which include Super Bowl, Labour Day, Thanksgiving, and Christmas. 
+
+Dataset information:\
+
+This data contains sales and realted information from 2010-02-05 to 2012-11-01, in the file seven_eleven_sales. There are following fields in the file :\
+
+* Store - Store #
+* Date - Sale date
+* Weekly_Sales -  sales for the store on a given date
+* Holiday_Flag - 1/0 depending on holiday period or not
+* Temperature - Temperature on the sale day
+* Fuel_Price - Fuel price on sale day in that region
+* CPI – current consumer price index
+* Unemployment - current unemployment rate
+* Holiday Events\
+Super Bowl: 12-Feb-10, 11-Feb-11, 10-Feb-12, 8-Feb-13\
+Labour Day: 10-Sep-10, 9-Sep-11, 7-Sep-12, 6-Sep-13\
+Thanksgiving: 26-Nov-10, 25-Nov-11, 23-Nov-12, 29-Nov-13\
+Christmas: 31-Dec-10, 30-Dec-11, 28-Dec-12, 27-Dec-13
+
+
+### Objective:
+- Understand the problem and the data
+- Clean up and transform data as per requirement
+- Build a Linear Regression model and predict sales for upcoming time period 
+- Measure the performance of the model
+
+---
+
+#  Steps towards buiding a Solution
+
+** In this notebook, we'll go through following sections - 
+
+1. Setting up libraries & Ingesting Data
+2. Data Wrangling & EDA
+3. Feature Engineering 
+    * Data Manipulation
+    * Feature Scaling
+    * Feature Selection
+4. Modelling using Multiple Linear Regression
+5. Summary
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 1. Setting up libraries & Ingesting Data
+
+Importing the basic librarires
+"""
+
+import math                
+import numpy as np
+import pandas as pd
+import seaborn as sns                            # for plots                  
+
+
+from statsmodels.formula import api                # library used for model training ( better statisics)
+from sklearn.linear_model import LinearRegression  # Another library used for model training 
+from sklearn.feature_selection import RFE          # library used to reduce collinearity and feature selection
+from sklearn.preprocessing import StandardScaler   # used for Standardasing
+from sklearn.model_selection import train_test_split # used for train/test splits
+
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error # used for performance metrics
+
+import matplotlib.pyplot as plt # used for plotting
+
+"""Setting the default figure size for notebook"""
+
+plt.rcParams['figure.figsize'] = [10,6]
+
+"""Importing the dataset"""
+
+sales = pd.read_csv('seven_eleven_sales.csv')
+display(sales.head())
+
+original_sales = sales.copy(deep=True)
+
+print('\n\033[1mFindings:\033[0m The given sales data consists of {} data entries (rows) across {} columns.'.format(sales.shape[0], sales.shape[1]))
+
+#Checking unique values across each column to ge more insights into features, specially categorical features
+
+original_sales.nunique().sort_values()
+
+"""---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#  2. Data Wrangling & EDA
+
+##### Treating Date Variable
+"""
+
+# Dissecting data column into Day, Month , Year columns for easier EDA
+
+sales.Date = pd.to_datetime(sales.Date)
+
+sales['weekday'] = sales.Date.dt.weekday
+sales['month'] = sales.Date.dt.month
+sales['year'] = sales.Date.dt.year
+
+sales.drop(['Date'], axis=1, inplace=True)
+sales.head()
+
+# getting a list of features in our data 
+
+target = 'Weekly_Sales'
+
+features = [i for i in sales.columns if i not in [target]]
+original_sales = sales.copy(deep=True)
+
+features
+
+"""Checking for NULLS and analysing datatypes of all columns"""
+
+sales.info()
+
+"""##### 5 Point Summary"""
+
+# Getting the 5 point summary for all numerical variables
+
+display(sales.describe())
+
+"""*Findings* : 
+
+The data seems to be fairly accurate. There might be a few outliers which we'll inspect soon but overall the numbers seem reasonable.
+
+##### Duplicates & Null Value checks
+"""
+
+# Checking if the data has duplicates
+
+rows,cols = original_sales.shape
+
+sales.drop_duplicates(inplace=True)
+
+if sales.shape==(rows,cols):
+    print("No duplicates")
+else:
+    print('Duplicates removed ---> '+ str(rows-sales.shape[0]))
+
+# Checking for Null Values
+
+null_cnt = pd.DataFrame(sales.isnull().sum().sort_values(), columns=['Total Null Values'])
+null_cnt['Percentage'] = round(null_cnt['Total Null Values']/sales.shape[0],3)*100
+print('Total null values - ' + str(null_cnt))
+
+"""We can see that there are no Null values in the data
+
+Checking unique values across each column to ge more insights into features, specially categorical features -
+"""
+
+sales.nunique().sort_values()
+
+"""Checking number of Categorical and Numerical features -"""
+
+len(features)
+
+features
+
+# Since we know that there are 45 stores, hence setting 45 as threshhold in below funcion
+
+unique = sales[features].nunique().sort_values()
+num_f = []
+cat_f = []
+
+for i in range(sales[features].shape[1]):
+    if unique.values[i]<=45:cat_f.append(unique.index[i])
+    else: num_f.append(unique.index[i])
+
+print('\n\033[1mFindings:\033[0m The Datset has {} numerical & {} categorical features.'.format(len(num_f),len(cat_f)))
+
+num_f
+
+"""###  Univariate Analysis of Target Variable"""
+
+plt.figure(figsize=[8,4])
+sns.distplot(sales[target], color='g',hist_kws=dict(edgecolor="black", linewidth=2.1), bins=32)
+plt.title('Univariate Analysis of Target Variable  - Median Sales Value is ~$1M)')
+plt.show()
+
+"""**Finding:** The Target Variable seems to be be slightly right skewed,
+ meaning there are more instances of sales at lower values than at higher.
+ This is an expected and very common behaviour of sales data.
+
+###  Univariate Analysis of categorical features
+"""
+
+cat_f
+#math.ceil(len(cat_f)/2)
+
+print('\033[1mUnivariate Analysis of categorical features :'.center(120))
+
+n=2
+plt.figure(figsize=[15,3*math.ceil(len(cat_f)/n)])
+
+for i in range(len(cat_f)):
+    if sales[cat_f[i]].nunique()<=8:
+        plt.subplot(math.ceil(len(cat_f)/n),n,i+1)
+        sns.countplot(sales[cat_f[i]], color="#305cb0")
+    else:
+        plt.show()
+        plt.subplot(3,1,i-1)
+        sns.countplot(sales[cat_f[i]],color="#305cb0")
+        
+plt.tight_layout()
+plt.show()
+
+"""**Insights:** 
+
+1. There are about 500 entries of weekly sales which correspond to holiday period,
+ out of ~6500. It will be interesting to see how much they contribute to total sales via
+ multivariate analysis of sales vs holiday period. If the contribution comes out to be significant than that will be a major insight. 
+
+2. We have more weekly sales entries for 2011 and lesser entries for other years.
+ This is expected since we know the given data is not for entire duration of all 3 years. 
+
+3. All stores have equal entries for weekly sales - 143 Entries. Which seems correct as 143 * 45  = 6435,
+ which we know are the number of rows in data
+
+4. Since this analysis only represents the "count of entries",
+ the month-wise graph is insignificant as we know each month has fixed number of weeks and we have fixed number of stores as well (45)
+
+###  Univariate Analysis of Numerical Variables
+"""
+
+num_f
+
+#Visualising the numeric features 
+
+print('\033[1mNumeric Features Distribution'.center(130))
+
+n=4
+
+
+plt.figure(figsize=[15,6*math.ceil(len(num_f)/n)])
+for i in range(len(num_f)):
+    plt.subplot(2,4,i+1) #only 4 graphs are to be plot but 2,4 is used to adjust size
+    sns.distplot(sales[num_f[i]],hist_kws=dict(edgecolor="black", linewidth=2), bins=15,
+                 color=list(np.random.randint([255,255,255])/255))
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=[15,6*math.ceil(len(num_f)/n)])
+for i in range(len(num_f)):
+    plt.subplot(2,4,i+1)
+    sales.boxplot(num_f[i])
+plt.tight_layout()
+plt.show()
+
+"""**Findings:** 
+
+* There seem to be some outliers in a few numerical features. It is better to fix these before model building for a better model.
+ Well do that as part of "Data Preprocessing" Section
+
+* CPI follows a Bi-Modal distribution, hence one needs to be careful that the model algorythm should support such features.
+ For this case, it is okay since Linear Regression is not impacted by such distribution.
+
+* All other features follow Normal Distrubution.
+
+###  Bi-Variate Analysis of Numerical features to check for collinearity
+"""
+
+pair_plot = sns.pairplot(sales)
+plt.title('Pairplots for all the Feature')
+pair_plot.map_upper(sns.regplot)
+plt.show()
+
+"""**Findings:** 
+
+It is important that feature set doesn't have correlated variables. specially in linear regression.
+ We'll later remove these features also in Feature selection section. 
+
+Some features in the above plot seem to be correlated. Let's check this further by plotting correlation using Heatmap.
+
+##### Collinearity Check | Heatmap
+"""
+
+heatmap_data=sales.corr()
+sns.heatmap(heatmap_data, cmap='YlGnBu', annot = True)
+
+"""We can confirm that a lot of pairs have high correlation among them.
+ Thus, we'll need to address multicollinearity in the data, which will be done in upcoming section.
+
+###  Bi-variate analysis of sales across different categorical features
+
+adjusting the total size of 15,15 as 2x2 then as 614 615 616
+"""
+
+# NOTE : "Average" metrics are plotted in Pink and "Totals" in Blue for better visual aid
+
+
+plt.figure(figsize=[15,15])                                                              # redefining figure size 
+                                                                                         # as we are using subplots
+
+# Plot 1 : Total Sales across Holidays/ Non_holidays -------------------------------------------------------------------------
+plt.subplot(221)                                                      # Plot 1
+grouped_sales = sales[['Holiday_Flag','Weekly_Sales']].groupby('Holiday_Flag').sum()     # Grouping by Holiday_Flag and 
+                                                                                         # calculating sum of sales by holiday flag
+    
+sns.barplot(y='Weekly_Sales', x=grouped_sales.index, color="#305cb0",data=grouped_sales) # Plotting barplot of Sales vs holiday flag
+plt.title('Total Sales on Holidays/Non-Holidays', size = 15)                             # Giving title to plot
+
+
+# Plot 2 : Average Weekly Sales across Holidays/ Non_holidays ----------------------------------------------------------------
+plt.subplot(222)                                                     # Plot 2
+grouped_sales_sum = sales[['Holiday_Flag','Weekly_Sales']].groupby('Holiday_Flag').sum() # Grouping by Holiday_Flag and 
+                                                                                         # calculating sum of sales by holiday flag
+    
+grouped_sales_count = sales[['Holiday_Flag','Weekly_Sales']].groupby('Holiday_Flag').count() # Grouping by Holiday_Flag and 
+                                                                                             # calculating  count of rows by holiday flag
+    
+avg_weekly_sales = grouped_sales_sum['Weekly_Sales']/grouped_sales_count['Weekly_Sales'] # calculating average by dividing sum
+                                                                                         #  by total rows
+    
+sns.barplot(y=avg_weekly_sales, x=grouped_sales_sum.index, color="#ed7658")              # Plotting barplot of Average Weekly Sales
+                                                                                         # vs holiday flag
+plt.title('Average Sales on Holidays/Non-Holidays', size = 15)                           # Giving title to plot
+
+# Plot 3 : Total Sales across Months ----------------------------------------------------------------------------------------
+plt.subplot(614)                                                     # Plot 3
+grouped_sales = sales[['month','Weekly_Sales']].groupby('month').sum()                   # Grouping by month and 
+                                                                                         # calculating sum of sales by month flag
+sns.barplot(y='Weekly_Sales', x=grouped_sales.index, color="#305cb0",data=grouped_sales) # Plotting barplot of Sales vs months
+plt.title('Total Sales by Months', size = 15)                                            # Giving title to plot
+
+
+# Plot 4 : Average Weekly Sales across Months -------------------------------------------------------------------------------
+plt.subplot(615)                                                     # Plot 4
+
+grouped_sales_sum = sales[['month','Weekly_Sales']].groupby('month').sum()               # Grouping by month and 
+                                                                                         # calculating sum of sales by month
+    
+grouped_sales_count = sales[['month','Weekly_Sales']].groupby('month').count()           # Grouping by month and 
+                                                                                         # calculating  count of rows by month
+avg_weekly_sales = grouped_sales_sum['Weekly_Sales']/grouped_sales_count['Weekly_Sales'] # calculating average by dividing sum
+                                                                                         #  by total rows
+
+sns.barplot(y=avg_weekly_sales, x=grouped_sales_sum.index, color="#ed7658")              # Plotting barplot of Avg Weekly Sales
+                                                                                         # vs months
+plt.title('Average Weekly Sales by Months', size = 15)                                   # Giving title to plot
+
+# Plot 5 : Total Sales across Stores --------------------------------------------------------------------------------------
+
+plt.subplot(616)                                                     # Plot 5
+
+grouped_sales_sum = sales[['Store','Weekly_Sales']].groupby('Store').sum()               # Grouping by Store and 
+                                                                                         # calculating  sum of sales by Store
+sns.barplot(y='Weekly_Sales', x=grouped_sales_sum.index, color="#305cb0",data=grouped_sales_sum) 
+                                                                                         # Plotting barplot of Sales across Stores
+plt.title('Total Sales by Stores', size = 15)                                            # Giving title to plot
+
+plt.tight_layout()                                                                       # to adjust plot boundaries
+
+"""**Insights** :
+
+* Although 90+ % of the sales are from Non_holidays but the average weekly sales are higher for Holiday period by about 10%. ( Plot 1 & 2)
+
+* Although in terms of total sales-  April,July,September,October and December show better performance. But since we have uneven data across months,
+ it is more useful to look at "Average sales" rather than totals, which are shown in plot 4. 
+
+* As per average sale by months plot, average sales are higher in November and December.
+ ( Which is expected because of holidays in Nov and Dec). Feb, June and August also show good results. 
+
+* Despite holiday in september, the sales are not impacted significantly
+
+* Thus we can conclude that month and holiday flag are going to be crucial feature in our model. 
+
+* As per the last plot, we can see that sales number vary a lot as per the store. Thus, it can be a significant feature in our model.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#  3. Feature Engineering and Feature Selection
+
+###  Feature Engineering | One Hot Encoding
+"""
+
+categories_dummy = pd.DataFrame()
+for category in cat_f:
+    categories_dummy = pd.concat([categories_dummy,pd.get_dummies(sales[category],drop_first=False,prefix=str(category))],axis=1)
+# drop first is false bec 45 stores need to be seen
+categories_dummy.shape
+
+# Note: we have already discussed One-hot encoding concept and practiced the same in last session
+
+categories_dummy.head()
+
+# Merging dummies with main data
+
+sales_dummy = pd.concat([sales,categories_dummy],axis=1)
+sales_dummy.head()
+
+"""###  Feature Engineering | Outlier Treatment"""
+
+num_f
+
+#Removal of outlier:
+
+sales_new = sales_dummy.copy()
+
+
+for i in num_f:
+    quartile1 = sales_new[i].quantile(0.25)
+    quartile3 = sales_new[i].quantile(0.75)
+    inter_quartile_range = quartile3 -quartile1
+    sales_new = sales_new[sales_new[i] <= (quartile3+(1.5*inter_quartile_range))]
+    sales_new = sales_new[sales_new[i] >= (quartile1-(1.5*inter_quartile_range))]
+    sales_new = sales_new.reset_index(drop=True) #the reseted index wont be saved
+display(sales_new.head())
+
+print('Before outlier removal, the dataset had {} rows'.format(sales_dummy.shape[0]))
+print('After outlier removal, the dataset has {} rows'.format(sales_new.shape[0]))
+
+# Visualising final Dataset shape after outlier removals
+
+plt.title('Pie Chart showing impact of outlier treatment ')
+plt.pie([sales_new.shape[0], original_sales.shape[0]-sales_new.shape[0]], radius = 1, labels=['Retained','Dropped'], counterclock=False, 
+        autopct='%1.1f%%', pctdistance=0.9, shadow=True)
+
+plt.pie([sales_new.shape[0]], labels=['100%'], labeldistance=-0, radius=0.78)
+
+plt.show()
+
+print(f'In Outlier Treatment, {original_sales.shape[0]-sales_new.shape[0]} samples were dropped, \
+while reatining {round(100 - ((original_sales.shape[0]-sales_new.shape[0])*100/(original_sales.shape[0])),2)}% of the rows.')
+
+"""---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###  Feature Engineering | Standardization
+"""
+
+#Feature Scaling (Standardization)
+
+#Splitting the data intro training & testing sets
+X = sales_new.drop([target],axis=1)
+Y = sales_new[target]
+
+Train_X, Test_X, Train_Y, Test_Y = train_test_split(X, Y, train_size=0.75, test_size=0.25, random_state=150)
+
+Train_X.reset_index(drop=True,inplace=True)
+
+print('Data before Train/Test Split  ---> ',X.shape,Y.shape,'\nTrain dataset  ---> ', 
+      Train_X.shape,Train_Y.shape,'\nTest dataset   ---> ', Test_X.shape,'', Test_Y.shape)
+
+
+# Standardization
+
+std = StandardScaler()
+
+print('\033[1mStandardardization on Train dataset'.center(100))
+Train_X_std = std.fit_transform(Train_X)
+Train_X_std = pd.DataFrame(Train_X_std, columns=X.columns)
+display(Train_X_std.describe())
+
+###### VERY IMPORTANT #####
+# dont do scaling on onehot encoded variables - its missed here by error
+
+print('\n','\033[1mStandardardization on Test dataset'.center(100))
+Test_X_std = std.transform(Test_X)
+Test_X_std = pd.DataFrame(Test_X_std, columns=X.columns)
+display(Test_X_std.describe())
+
+"""###  Feature Engineering | Feature Selection using RFE
+
+We already know that there is multicollinearity in our data which needs to be addressed.
+
+We will be using RFE method to drop insignificant features from our dataset.
+"""
+
+sales_new.shape
+
+# Below code plots a R2 curve against number of features dropped by RFE Method. 
+# We can decide on optimal number of feature after analysing the plot
+
+from sklearn.feature_selection import RFE          # library used to reduce collinearity and feature selection
+
+train_r2=[]
+test_r2=[] 
+
+
+max_features=sales_new.shape[1]-2
+for i in range(max_features):                               # Running iteratively an RFE function with 
+                                                            # decreasing number of features to be dropped each time
+    lm = LinearRegression()
+    rfe = RFE(lm,n_features_to_select=Train_X_std.shape[1]-i)       
+    rfe = rfe.fit(Train_X_std, Train_Y)                     # The output of RFE.fit() will be an object. 
+                                                            # ".support_" attribute of 
+                                                            # that object will be an array of True/False 
+                                                            # for selection/rejection of features
+
+    LR = LinearRegression()
+    LR.fit(Train_X_std.loc[:,rfe.support_], Train_Y)        # Fitting a multiple linear regression model based on RFE selected 
+                                                            # features
+
+    pred_train = LR.predict(Train_X_std.loc[:,rfe.support_])     # Predicting Target for Train set
+    pred_test = LR.predict(Test_X_std.loc[:,rfe.support_])      # Predicting Target for Test set
+
+    train_r2.append(r2_score(Train_Y, pred_train))               # R2 Score for Train set
+    test_r2.append(r2_score(Test_Y, pred_test))                 # R2 Score for Test set
+
+
+plt.plot(train_r2, label='Train R2')
+plt.plot(test_r2, label='Test R2')
+
+plt.legend()
+plt.grid()
+plt.show()
+
+"""#### Finding :
+It can be seen that R2 score remains fairly constant until RFE had dropped around 30 features, after which it start to decline sharply.
+
+Hence we will be removing 30 features suggested by RFE in next step for training our MLR model.
+
+##### Final Feature Selection Step
+"""
+
+# Final Feature Selection using RFE ( 30 features need to be dropped)
+
+lm = LinearRegression()
+rfe_features = RFE(lm,n_features_to_select=Train_X_std.shape[1]-30)            
+rfe_features = rfe_features.fit(Train_X_std, Train_Y)
+
+LR = LinearRegression()
+LR.fit(Train_X_std.loc[:,rfe_features.support_], Train_Y)  # rfe_features.support_ provides an array of True/False which 
+                                                           # essentially helps in selecting the best and most efficient features.
+
+
+pred_train = LR.predict(Train_X_std.loc[:,rfe_features.support_])
+pred_test = LR.predict(Test_X_std.loc[:,rfe_features.support_])
+
+print(r2_score(Train_Y, pred_train))
+print(r2_score(Test_Y, pred_test))
+
+"""Thus, even after dropping 30 features, model still gives a good accuracy of about 90%
+
+This confirms our initial understanding of colliniarity in the data
+"""
+
+# Storing our new reduced data in new variables for model training 
+Train_X_std_rfe = Train_X_std.loc[:,rfe_features.support_]
+Test_X_std_rfe = Test_X_std.loc[:,rfe_features.support_]
+
+Train_X_std_rfe.columns
+
+"""---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#4. Model Training and Evaluation | Multiple Linear Regression
+
+###  Model Training
+"""
+
+# Model Training | Multiple Linear Regression ( on reduced data after RFE )
+
+MLR = LinearRegression().fit(Train_X_std_rfe,Train_Y)
+
+print('{}{}\033[1m Coefficients & Intercept of Trained MLR model \033[0m{}{}\n'.format('<'*3,'-'*35 ,'-'*35,'>'*3))
+
+print('\nThe Coeffecient of the MLR model is ',MLR.coef_)
+
+print('\n\nThe Intercept of the MLR model is',MLR.intercept_)
+
+"""##### Defining a Model Evaluation function
+
+Defining a function for giving us a complete summary of above model
+
+NOTE: There is an another library called Statsmodels which is better in terms of providing summary of a model 
+      We will also train our model with that library later in a moment
+
+Below code picks 2 random features for our scatter plot against target , 
+through which we can visualise the before-after prediction data
+It is impossible to visualise all the features since we only have 3 dimensions, hence the random choice of vaiables
+"""
+
+np.random.choice(Train_X_std_rfe.columns.values,2,replace=False)
+
+two_random_features_for_scatter =np.random.choice(Train_X_std_rfe.columns.values,2,replace=False)
+
+#rc=np.random.choice(Train_X_std.loc[:,Train_X_std.nunique()>=50].columns.values,2,replace=False)
+
+def Evaluation( pred_train,pred_test):
+    
+    # Part -1 Plotting Residual Plots & Predicted Target vs Actual Target to understand the spread
+    
+    print('\n{}Residual Plots{}'.format('-'*20, '-'*20))
+    plt.figure(figsize=[15,4])
+
+    plt.subplot(1,2,1)
+    sns.distplot((Test_Y - pred_test))
+    plt.title('Error Terms')          
+    plt.xlabel('Errors') 
+
+    plt.subplot(1,2,2)
+    plt.scatter(Test_Y,pred_test)
+    plt.plot([Train_Y.min(),Train_Y.max()],[Train_Y.min(),Train_Y.max()], 'r--')
+    plt.title('Test vs Prediction')         
+    plt.xlabel('y_test')                       
+    plt.ylabel('y_pred')                       
+    plt.show()
+    
+
+
+    # Part -2 Evaluating the Model ( by R2 )
+
+    print('\n\n{}Training Set Evaluation{}'.format('-'*20, '-'*20))
+    print('\nR2-Score on Training set --->',round(r2_score(Train_Y, pred_train),20))
+
+
+    print('\n{}Testing Set Evaluation{}'.format('-'*20, '-'*20))
+    print('\nR2-Score on Testing set --->',round(r2_score(Test_Y, pred_test),20))
+    
+    # Part -3 Plotting scatter plots for predicted data vs the real datapoints 
+    plt.figure(figsize=[15,6])
+    for e,i in enumerate(two_random_features_for_scatter):
+        plt.subplot(2,3,e+1)
+        plt.scatter(y=Train_Y, x=Train_X_std_rfe[i], label='Actual')
+        plt.scatter(y=pred_train, x=Train_X_std_rfe[i], label='Prediction')
+        plt.legend()
+    plt.show()
+
+"""###  Model Predition &  Evaluation """
+
+pred_train = MLR.predict(Train_X_std_rfe)
+pred_test = MLR.predict(Test_X_std_rfe)
+
+Evaluation(pred_train, pred_test)
+
+"""Hence, we can see that the model accuracy comes out to be ~90% as we saw it durinf RFE feature selection
+
+##### Additional Topic | Alternate Way - Model Training using Statsmodels
+"""
+
+# Multiple Linear Regression model with statsmodels
+
+from statsmodels.formula import api                # library used for model training ( better statisics)
+
+train_x_y = pd.concat([Train_X_std_rfe,Train_Y.reset_index(drop=True)],axis=1)
+
+api_model = api.ols(formula='{} ~ {}'.format(target,' + '.join(str(i) for i in Train_X_std_rfe.columns)),data=train_x_y).fit()
+
+api_model.summary()
+
+"""Thus, we can see that statsmodels provides model result in a very nice summarised way and a lot of our work gets reduced.
+
+But yes, it has a bit different syntax ( similar to R), which can be a trouble sometimes for beginners. In contrast, Scikit learn is pretty much straight forward given the data is in good shape for training.
+
+---
+
+#  5. Summary
+
+- The dataset was quite smaller with about 8% outliers. Hence, processing time was never a hurdle in the project.
+- Through EDA we understood some relations between different variables which helped us understand the data better and give a hint that outlier treatment and feature ellimination will be required before we train the model
+- Since a lot of features had colliniarity, RFE method was used to select the most efficient features.
+- Finally we have our MLR model ready which can predict weekly sales as per the given input with 90% accuracy.
+
+---
+"""
